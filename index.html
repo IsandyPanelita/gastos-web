@@ -133,11 +133,6 @@
   .cat-row .pct { color: var(--faint); font-size: 13px; }
   .prom { margin-top: 12px; font-size: 13px; color: var(--muted); font-weight: 600; }
 
-  .bar-wrap { height: 8px; background: var(--line); border-radius: 999px; overflow: hidden; margin-top: 6px; }
-  .bar-wrap.mini { height: 6px; }
-  .bar { height: 100%; background: var(--accent); border-radius: 999px; transition: width .4s ease; }
-  .bar.warn { background: var(--danger); }
-
   .filter-bar { display: flex; gap: 10px; margin-bottom: 14px; align-items: center; flex-wrap: wrap; }
   .filter-bar input[type="month"] { width: auto; background: var(--panel); }
   .filter-bar .search-input { width: 180px; }
@@ -147,12 +142,6 @@
   .paginacion { display: none; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; font-size: 13px; color: var(--muted); }
   .paginacion button { background: var(--tab-inactive); color: var(--tab-inactive-text); width: auto; padding: 5px 12px; border-radius: 8px; }
   .paginacion button:disabled { opacity: .4; cursor: default; }
-
-  .pres-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
-  .pres-row:last-child { border-bottom: none; }
-  .pres-row span { flex: 1; min-width: 120px; font-size: 14px; }
-  .pres-row input { width: 160px; }
-  .pres-row .pres-status { width: 160px; text-align: right; font-size: 12px; color: var(--muted); white-space: nowrap; }
 
   table.balance { width: 100%; border-collapse: collapse; font-size: 13px; }
   table.balance th, table.balance td { text-align: right; padding: 7px 10px; border-bottom: 1px solid var(--line); }
@@ -211,8 +200,6 @@
     <div class="card mes-card">
       <div class="label">Gastos de este mes</div>
       <div class="value" id="valMes">-</div>
-      <div class="bar-wrap mini" id="barTope" style="display:none"><div class="bar" id="barTopeFill" style="width:0%"></div></div>
-      <div class="hint" id="hintTope">Configura un límite mensual en "Presupuestos" para ver tu progreso.</div>
     </div>
   </div>
 
@@ -287,22 +274,6 @@
         <span>✏️ Editando un ingreso existente.</span>
         <button type="button" id="btnCancelarEditIngreso">Cancelar edición</button>
       </div>
-    </div>
-  </div>
-
-  <div class="panel">
-    <h2>🎯 Presupuestos mensuales</h2>
-    <div style="display:flex; gap:12px; align-items:end; flex-wrap:wrap; margin-bottom:14px">
-      <div style="flex:1; min-width:220px">
-        <label for="topeGeneral">Límite de gasto mensual total</label>
-        <input type="number" id="topeGeneral" min="0" step="0.01" placeholder="Ej: 1200000">
-      </div>
-      <button type="button" class="btn-save" id="btnGuardarTope">Guardar tope general</button>
-    </div>
-    <div style="font-size:12px; color:var(--muted); margin-bottom:8px">Topes por categoría (deja vacío = sin límite):</div>
-    <div id="presCats"></div>
-    <div style="margin-top:12px">
-      <button type="button" class="btn-add" id="btnGuardarPres" style="width:auto">Guardar presupuestos</button>
     </div>
   </div>
 
@@ -389,8 +360,6 @@
   const KEY_INIT = 'gastos_inicializado';
   const KEY_OLD_TOTAL = 'gastos_total';
   const KEY_TEMA = 'gastos_tema';
-  const KEY_PRES = 'gastos_presupuestos';
-  const KEY_TOPE = 'gastos_tope_general';
   const POR_PAGINA = 10;
 
   const $ = id => document.getElementById(id);
@@ -402,6 +371,8 @@
   function limpiarDatosAntiguos() {
     localStorage.removeItem(KEY_OLD_TOTAL);
     localStorage.removeItem(KEY_SALDO);
+    localStorage.removeItem('gastos_presupuestos');
+    localStorage.removeItem('gastos_tope_general');
   }
 
   if (localStorage.getItem(KEY_INIT) !== '1') {
@@ -418,14 +389,6 @@
   let catsIng = JSON.parse(localStorage.getItem(KEY_CATS_ING) || 'null');
   if (!catsIng) catsIng = DEF_CATS_ING.slice();
 
-  let presupuestos = {};
-  try {
-    const p = JSON.parse(localStorage.getItem(KEY_PRES) || '{}');
-    if (p && typeof p === 'object' && !Array.isArray(p)) presupuestos = p;
-  } catch (e) {}
-  let topeGeneral = Number(localStorage.getItem(KEY_TOPE) || 0);
-  if (!(topeGeneral > 0)) topeGeneral = 0;
-
   let editCtx = null;
   let pageGastos = 1;
   let pageIngresos = 1;
@@ -437,8 +400,6 @@
   function guardarCats() { localStorage.setItem(KEY_CATS, JSON.stringify(categorias)); }
   function guardarIngresos() { localStorage.setItem(KEY_INGRESOS, JSON.stringify(ingresos)); }
   function guardarCatsIng() { localStorage.setItem(KEY_CATS_ING, JSON.stringify(catsIng)); }
-  function guardarPresupuestos() { localStorage.setItem(KEY_PRES, JSON.stringify(presupuestos)); }
-  function guardarTope() { localStorage.setItem(KEY_TOPE, String(topeGeneral || '')); }
 
   if (gastos.some(g => g.id === undefined) || ingresos.some(g => g.id === undefined)) {
     gastos.forEach(g => { if (g.id === undefined) g.id = uid(); });
@@ -470,11 +431,6 @@
     return PALETA[(i < 0 ? 0 : i) % PALETA.length];
   }
 
-  function gastoDelMes(categoria) {
-    const mes = mesActual();
-    return gastos.filter(g => g.categoria === categoria && g.fecha.slice(0, 7) === mes).reduce((s, g) => s + Number(g.monto), 0);
-  }
-
   function render() {
     const mes = mesActual();
     const gastoMes = gastos.filter(g => g.fecha.slice(0, 7) === mes).reduce((s, g) => s + Number(g.monto), 0);
@@ -486,22 +442,6 @@
     $('avisoSaldo').style.display = sinFondos ? '' : 'none';
     $('valMes').textContent = money(gastoMes);
     $('valMesIng').textContent = money(ingresoMes);
-
-    const barTope = $('barTope');
-    const fill = $('barTopeFill');
-    const hint = $('hintTope');
-    if (topeGeneral > 0) {
-      barTope.style.display = '';
-      const pct = Math.min(100, gastoMes / topeGeneral * 100);
-      fill.style.width = pct + '%';
-      fill.classList.toggle('warn', gastoMes >= topeGeneral);
-      hint.textContent = gastoMes >= topeGeneral
-        ? '⚠ Superaste tu límite mensual de ' + money(topeGeneral)
-        : 'Te quedan ' + money(topeGeneral - gastoMes) + ' de tu límite mensual.';
-    } else {
-      barTope.style.display = 'none';
-      hint.textContent = 'Configura un límite mensual en "Presupuestos" para ver tu progreso.';
-    }
 
     const meses = {};
     gastos.forEach(g => { meses[g.fecha.slice(0, 7)] = (meses[g.fecha.slice(0, 7)] || 0) + Number(g.monto); });
@@ -653,13 +593,6 @@
       (g.desc || '').trim().toLowerCase() === (nuevo.desc || '').trim().toLowerCase() &&
       g.categoria === nuevo.categoria
     );
-  }
-
-  function avisarPresupuestoCategoria(categoria) {
-    const pre = presupuestos[categoria];
-    if (pre > 0 && gastoDelMes(categoria) >= pre) {
-      mostrarToast('⚠ Superaste tu presupuesto de ' + categoria, 'error');
-    }
   }
 
   // ---------- Tabs ----------
@@ -850,56 +783,26 @@
     ctx.fillText('— Ingresos', left + 70, 10);
   }
 
-  // ---------- Categorías / presupuestos ----------
+  // ---------- Categorías ----------
 
   function renderCategorias() {
     const porCat = {};
     gastos.forEach(g => { porCat[g.categoria] = (porCat[g.categoria] || 0) + Number(g.monto); });
     const total = Object.values(porCat).reduce((s, v) => s + v, 0);
     const cols = coloresCategorias();
-    const mes = mesActual();
 
     $('catList').innerHTML = categorias.map((c, i) => {
       const m = porCat[c] || 0;
       const pct = total ? Math.round(m / total * 100) : 0;
-      const pre = presupuestos[c];
-      let bar = '';
-      if (pre > 0) {
-        const mesCat = gastos.filter(g => g.categoria === c && g.fecha.slice(0, 7) === mes).reduce((s, g) => s + Number(g.monto), 0);
-        const wp = Math.min(100, mesCat / pre * 100);
-        const warn = mesCat >= pre;
-        bar = `<div class="bar-wrap"><div class="bar${warn ? ' warn' : ''}" style="width:${wp}%"></div></div>`;
-      }
       return `<div class="cat-block">
         <div class="cat-row">
           <span class="name"><span class="dot" style="background:${cols[i].color}"></span>${esc(c)}</span>
           <span>${money(m)} <span class="pct">(${pct}%)</span></span>
-        </div>${bar}
+        </div>
       </div>`;
     }).join('');
 
     dibujarGrafico(porCat, cols);
-  }
-
-  function renderPresPanel() {
-    $('presCats').innerHTML = categorias.map(c => {
-      const pre = presupuestos[c] || '';
-      const gastado = gastoDelMes(c);
-      let status = '';
-      if (presupuestos[c] > 0) {
-        const pct = Math.min(100, gastado / presupuestos[c] * 100);
-        const left = presupuestos[c] - gastado;
-        status = (gastado >= presupuestos[c]
-          ? `<span style="color:var(--danger)">⚠ ${money(gastado)} (${Math.round(pct)}%)</span>`
-          : `${money(gastado)} de ${money(presupuestos[c])} · quedan ${money(left)}`);
-      }
-      return `<div class="pres-row">
-        <span>${esc(c)}</span>
-        <input type="number" class="pres-input" data-cat="${esc(c)}" min="0" step="0.01" placeholder="sin límite" value="${esc(pre)}">
-        <span class="pres-status">${status}</span>
-      </div>`;
-    }).join('');
-    $('topeGeneral').value = topeGeneral > 0 ? topeGeneral : '';
   }
 
   // ---------- Balance anual y recurrentes ----------
@@ -968,7 +871,6 @@
     dibujarEvolucion();
     renderBalance();
     renderRecurrentes();
-    renderPresPanel();
   }
 
   function descargarArchivo(nombre, contenido, tipo) {
@@ -1119,13 +1021,9 @@
       ingresos = data.ingresos || [];
       categorias = (Array.isArray(data.categorias) && data.categorias.length) ? data.categorias : DEF_CATS.slice();
       catsIng = (Array.isArray(data.catsIng) && data.catsIng.length) ? data.catsIng : DEF_CATS_ING.slice();
-      presupuestos = (data.presupuestos && typeof data.presupuestos === 'object') ? data.presupuestos : {};
-      topeGeneral = Number(data.topeGeneral || 0);
-      if (!(topeGeneral > 0)) topeGeneral = 0;
       gastos.forEach(g => { if (g.id === undefined) g.id = uid(); });
       ingresos.forEach(g => { if (g.id === undefined) g.id = uid(); });
       guardarSaldo(); guardarGastos(); guardarIngresos(); guardarCats(); guardarCatsIng();
-      guardarPresupuestos(); guardarTope();
       renderSelectCats(); renderSelectCatsIng();
       pageGastos = 1; pageIngresos = 1;
       refrescoCompleto();
@@ -1172,7 +1070,6 @@
     resetForm('gastos');
     refrescoCompleto();
     mostrarToast('✓ Gasto agregado', 'ok');
-    avisarPresupuestoCategoria(categoria);
   });
 
   $('formIngreso').addEventListener('submit', e => {
@@ -1216,7 +1113,7 @@
     if (!categorias.includes(c)) {
       categorias.push(c);
       guardarCats();
-      renderSelectCats(); renderCategorias(); renderPresPanel();
+      renderSelectCats(); renderCategorias();
       mostrarToast('✓ Categoría agregada', 'ok');
     } else {
       mostrarToast('Esa categoría ya existe.', '');
@@ -1324,28 +1221,6 @@
   $('btnCancelarEditGasto').addEventListener('click', () => cancelarEdicion('gastos'));
   $('btnCancelarEditIngreso').addEventListener('click', () => cancelarEdicion('ingresos'));
 
-  // ---------- Eventos: presupuestos ----------
-
-  $('btnGuardarTope').addEventListener('click', () => {
-    const v = Number($('topeGeneral').value);
-    topeGeneral = v > 0 ? v : 0;
-    guardarTope();
-    render(); renderPresPanel();
-    mostrarToast(v > 0 ? '✓ Límite mensual guardado' : 'Límite mensual eliminado.', 'ok');
-  });
-
-  $('btnGuardarPres').addEventListener('click', () => {
-    const nuevos = {};
-    document.querySelectorAll('.pres-input').forEach(inp => {
-      const v = Number(inp.value);
-      if (v > 0) nuevos[inp.dataset.cat] = v;
-    });
-    presupuestos = nuevos;
-    guardarPresupuestos();
-    renderCategorias(); renderPresPanel();
-    mostrarToast('✓ Presupuestos guardados', 'ok');
-  });
-
   // ---------- Eventos: gráficos ----------
 
   $('modoPastel').addEventListener('click', () => {
@@ -1381,9 +1256,7 @@
       gastos,
       ingresos,
       categorias,
-      catsIng,
-      presupuestos,
-      topeGeneral
+      catsIng
     };
     descargarArchivo('respaldo_gastos_' + fechaHoy() + '.json', JSON.stringify(data, null, 2), 'application/json;charset=utf-8;');
     mostrarToast('✓ Respaldo descargado', 'ok');
@@ -1402,20 +1275,18 @@
   });
 
   $('btnReiniciar').addEventListener('click', () => {
-    if (!confirm('⚠ Esto borrará TODOS tus datos (gastos, ingresos, presupuestos).\nLa acción no se puede deshacer. ¿Continuar?')) return;
+    if (!confirm('⚠ Esto borrará TODOS tus datos (gastos, ingresos).\nLa acción no se puede deshacer. ¿Continuar?')) return;
     const clave = prompt('Para confirmar, escribe REINICIAR y pulsa Aceptar:');
     if (clave !== 'REINICIAR') {
       mostrarToast('Confirmación incorrecta. No se borró nada.', 'error');
       return;
     }
-    [KEY_SALDO, KEY_GASTOS, KEY_CATS, KEY_INGRESOS, KEY_CATS_ING, KEY_PRES, KEY_TOPE].forEach(k => localStorage.removeItem(k));
+    [KEY_SALDO, KEY_GASTOS, KEY_CATS, KEY_INGRESOS, KEY_CATS_ING].forEach(k => localStorage.removeItem(k));
     saldo = 0;
     gastos = [];
     ingresos = [];
     categorias = DEF_CATS.slice();
     catsIng = DEF_CATS_ING.slice();
-    presupuestos = {};
-    topeGeneral = 0;
     editCtx = null;
     pageGastos = 1; pageIngresos = 1; busqueda = '';
     $('busqueda').value = '';
